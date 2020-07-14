@@ -145,9 +145,18 @@ private:
 
     int m_colIndex;
     int m_sampleIndex;
-    int m_amSampleIndex;
+	int m_sampleIndex3;
+	int m_amSampleIndex;
     int m_rowIndex;
     int m_lineIndex;
+
+	Complex m_syncErrorTotal;
+	float m_subsampleShift;
+
+
+	long long m_sampleIndex2;
+	float prevSample;
+
 
     AvgExpInt m_objAvgColIndex;
     int m_avgColIndex;
@@ -253,35 +262,44 @@ private:
     {
         // Filling pixel on the current line - reference index 0 at start of sync pulse
         // remove only sync pulse empirically, +4 is to compensate shift due to hsync amortizing factor of 1/4
-        m_registeredTVScreen->setDataColor(m_colIndex - m_numberSamplesPerHSync + m_numberSamplesPerHTop, sampleVideo, sampleVideo, sampleVideo);
+		//m_registeredTVScreen->setDataColor(colIndex, sampleVideo, sampleVideo, sampleVideo);
+		//m_registeredTVScreen->setDataColor(m_colIndex - m_numberSamplesPerHSync + m_numberSamplesPerHTop - 4, sampleVideo, sampleVideo, sampleVideo);
+		m_registeredTVScreen->setDataColor(m_sampleIndex3 - m_numberSamplesPerHSync, sampleVideo, sampleVideo, sampleVideo);
 
         int synchroTimeSamples = (3 * m_samplesPerLine) / 4; // count 3/4 line globally
         float synchroTrameLevel =  0.5f * ((float) synchroTimeSamples) * m_settings.m_levelBlack; // threshold is half the black value over 3/4th of line samples
 
         // Horizontal Synchro detection
+		if ((prevSample >= m_settings.m_levelSynchroTop &&
+			sample < m_settings.m_levelSynchroTop) // horizontal synchro detected
+			&& (m_sampleIndex > (m_samplesPerLine / 2) + m_numberSamplesPerLineSignals))
+		{
+			m_avgColIndex = m_sampleIndex - m_colIndex - m_numberSamplesPerHTop;
+			//qDebug("HSync: %d %d %d", m_sampleIndex, m_colIndex, m_avgColIndex);
+			float errorAngle = 2 * M_PI * (m_sampleIndex - m_sampleIndex3) / m_samplesPerLine;
+			m_syncErrorTotal += Complex(cos(errorAngle), sin(errorAngle));
+			m_sampleIndex = 0;
+		}
+		else
+		{
+			m_sampleIndex++;
+		}
 
-        // Floor Detection 0
-        if (sample < m_settings.m_levelSynchroTop)
-        {
-            m_synchroSamples++;
-        }
-        // Black detection 0.3
-        else if (sample > m_settings.m_levelBlack) {
-            m_synchroSamples = 0;
-        }
+		m_sampleIndex3++;
+		if (m_sampleIndex3 >= (int)m_samplesPerLine)
+		{
+			if ((m_rowIndex == m_numberOfSyncLines - 1) && m_settings.m_hSync)
+			{
+				float errorAngle = atan2(m_syncErrorTotal.imag(), m_syncErrorTotal.real());
+				float errorSamples = errorAngle / (2 * M_PI) * m_samplesPerLine;
+				m_sampleIndex3 = errorSamples;
+				m_subsampleShift = fmod(errorSamples, 1.0f);
+				m_syncErrorTotal = Complex(0, 0);
+			}
+			else
+				m_sampleIndex3 = 0;
+		}
 
-        //Horizontal Synchro processing
-        if ((m_synchroSamples == m_numberSamplesPerHTop) // horizontal synchro detected
-         && (m_sampleIndex > (m_samplesPerLine/2) + m_numberSamplesPerLineSignals))
-        {
-            m_avgColIndex = m_sampleIndex - m_colIndex;
-            //qDebug("HSync: %d %d %d", m_sampleIndex, m_colIndex, m_avgColIndex);
-            m_sampleIndex = 0;
-        }
-        else
-        {
-            m_sampleIndex++;
-        }
 
         if (m_colIndex < m_samplesPerLine + m_numberSamplesPerHTop - 1) // increment until full line + next horizontal pulse
         {
@@ -330,7 +348,7 @@ private:
 
                         // Odd frame or not interleaved
                         if ((m_imageIndex % 2 == 1) || !m_interleaved) {
-                            m_registeredTVScreen->renderImage(0);
+                            m_registeredTVScreen->renderImage(0, m_subsampleShift);
                         }
 
                         if (m_lineIndex > m_settings.m_nbLines/2) { // long frame done (even)
@@ -377,6 +395,8 @@ private:
                 m_imageIndex++;
             }
         }
+		m_sampleIndex2++;
+		prevSample = sample;
     }
 };
 

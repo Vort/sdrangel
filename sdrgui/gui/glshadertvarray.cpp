@@ -44,6 +44,7 @@ GLShaderTVArray::GLShaderTVArray(bool blnColor) : m_blnColor(blnColor)
     m_objTexture = 0;
     m_intCols = 0;
     m_intRows = 0;
+	m_subsampleShift = 0.0f;
     m_blnInitialized = false;
     m_objCurrentRow = 0;
 
@@ -155,11 +156,19 @@ void GLShaderTVArray::RenderPixels(unsigned char *chrData)
 
     QMatrix4x4 objQMatrix;
 
+	float xShift = 2 * m_subsampleShift / m_intCols;
+
     GLfloat arrVertices[] =
     // 2 3
     // 1 4
-    //1             2            3           3           4            1
-    { -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1.0f };
+	{
+		-1.0f + xShift, -1.0f, // 1
+		-1.0f + xShift,  1.0f, // 2
+		 1.0f + xShift,  1.0f, // 3
+		 1.0f + xShift,  1.0f, // 3
+		 1.0f + xShift, -1.0f, // 4
+		-1.0f + xShift, -1.0f  // 1
+	};
 
     GLfloat arrTextureCoords[] =
     // 1 4

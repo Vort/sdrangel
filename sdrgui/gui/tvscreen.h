@@ -48,7 +48,7 @@ public:
     void setColor(bool blnColor);
     void resizeTVScreen(int intCols, int intRows);
     void getSize(int& intCols, int& intRows) const;
-    void renderImage(unsigned char * objData);
+    void renderImage(unsigned char * objData, float subsampleShift = 0.0);
     QRgb* getRowBuffer(int intRow);
     void resetImage();
     void resetImage(int alpha);
@@ -73,6 +73,7 @@ private:
     bool m_blnGLContextInitialized;
     int m_intAskedCols;
     int m_intAskedRows;
+	float m_subsampleShift;
 
 
 	// state

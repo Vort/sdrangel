@@ -43,6 +43,7 @@ public:
     GLShaderTVArray(bool blnColor);
     ~GLShaderTVArray();
 
+	void setSubsampleShift(float subsampleShift) { m_subsampleShift = subsampleShift; }
     void setColor(bool blnColor) { m_blnColor = blnColor; }
     void setAlphaBlend(bool blnAlphaBlend) { m_blnAlphaBlend = blnAlphaBlend; }
     void setAlphaReset() { m_blnAlphaReset = true; }
@@ -71,6 +72,7 @@ protected:
 
     int m_intCols;
     int m_intRows;
+	float m_subsampleShift;
 
     QRgb * m_objCurrentRow;
 
