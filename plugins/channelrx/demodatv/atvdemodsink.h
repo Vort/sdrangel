@@ -150,7 +150,8 @@ private:
     int m_rowIndex;
     int m_lineIndex;
 
-	Complex m_syncErrorTotal;
+	int m_syncErrorCount;
+	Complex m_syncShiftAverage;
 	float m_subsampleShift;
 
 
@@ -266,18 +267,42 @@ private:
 		//m_registeredTVScreen->setDataColor(m_colIndex - m_numberSamplesPerHSync + m_numberSamplesPerHTop - 4, sampleVideo, sampleVideo, sampleVideo);
 		m_registeredTVScreen->setDataColor(m_sampleIndex3 - m_numberSamplesPerHSync, sampleVideo, sampleVideo, sampleVideo);
 
-        int synchroTimeSamples = (3 * m_samplesPerLine) / 4; // count 3/4 line globally
-        float synchroTrameLevel =  0.5f * ((float) synchroTimeSamples) * m_settings.m_levelBlack; // threshold is half the black value over 3/4th of line samples
+		int synchroTimeSamples = (3 * m_samplesPerLine) / 4; // count 3/4 line globally
+		float synchroTrameLevel = 0.5f * ((float)synchroTimeSamples) * m_settings.m_levelBlack; // threshold is half the black value over 3/4th of line samples
 
-        // Horizontal Synchro detection
+		float isHSyncNeeded = false;
+
+		// Horizontal Synchro detection
 		if ((prevSample >= m_settings.m_levelSynchroTop &&
 			sample < m_settings.m_levelSynchroTop) // horizontal synchro detected
 			&& (m_sampleIndex > (m_samplesPerLine / 2) + m_numberSamplesPerLineSignals))
 		{
 			m_avgColIndex = m_sampleIndex - m_colIndex - m_numberSamplesPerHTop;
 			//qDebug("HSync: %d %d %d", m_sampleIndex, m_colIndex, m_avgColIndex);
-			float errorAngle = 2 * M_PI * (m_sampleIndex - m_sampleIndex3) / m_samplesPerLine;
-			m_syncErrorTotal += Complex(cos(errorAngle), sin(errorAngle));
+
+			if (m_settings.m_hSync)
+			{
+				int indexDiff = m_sampleIndex - m_sampleIndex3;
+				if (indexDiff > m_samplesPerLine / 2)
+					indexDiff -= m_samplesPerLine;
+				else if (indexDiff < -m_samplesPerLine / 2)
+					indexDiff += m_samplesPerLine;
+
+				if (abs(indexDiff) > m_numberSamplesPerHTopNom)
+				{
+					m_syncErrorCount++;
+					if (m_syncErrorCount >= 4)
+					{
+						// Fast sync: shift is too large, needs to be fixed ASAP
+						isHSyncNeeded = true;
+					}
+				}
+				else
+					m_syncErrorCount = 0;
+
+				float errorAngle = 2 * M_PI * indexDiff / m_samplesPerLine;
+				m_syncShiftAverage += Complex(cos(errorAngle), sin(errorAngle));
+			}
 			m_sampleIndex = 0;
 		}
 		else
@@ -288,17 +313,26 @@ private:
 		m_sampleIndex3++;
 		if (m_sampleIndex3 >= (int)m_samplesPerLine)
 		{
-			if ((m_rowIndex == m_numberOfSyncLines - 1) && m_settings.m_hSync)
+			m_sampleIndex3 = 0;
+			if (m_rowIndex == m_numberOfSyncLines - 1)
 			{
-				float errorAngle = atan2(m_syncErrorTotal.imag(), m_syncErrorTotal.real());
-				float errorSamples = errorAngle / (2 * M_PI) * m_samplesPerLine;
-				m_sampleIndex3 = errorSamples;
-				m_subsampleShift = fmod(errorSamples, 1.0f);
-				m_syncErrorTotal = Complex(0, 0);
+				// Slow sync: slight adjustement is needed
+				isHSyncNeeded = true;
 			}
-			else
-				m_sampleIndex3 = 0;
 		}
+
+		if (isHSyncNeeded && m_settings.m_hSync)
+		{
+			float shiftAngle = atan2(m_syncShiftAverage.imag(), m_syncShiftAverage.real());
+			float shiftSamples = shiftAngle / (2 * M_PI) * m_samplesPerLine;
+			m_sampleIndex3 = shiftSamples;
+			m_subsampleShift = fmod(shiftSamples, 1.0f);
+			m_syncShiftAverage = Complex(0, 0);
+			m_syncErrorCount = 0;
+			isHSyncNeeded = false;
+		}
+		if (!m_settings.m_hSync) // needs to be fixed: too much resource consumption
+			m_syncShiftAverage = Complex(0, 0);
 
 
         if (m_colIndex < m_samplesPerLine + m_numberSamplesPerHTop - 1) // increment until full line + next horizontal pulse
