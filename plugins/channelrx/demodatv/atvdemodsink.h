@@ -158,8 +158,6 @@ private:
 	long long m_sampleIndex2;
 	float prevSample;
 
-
-    AvgExpInt m_objAvgColIndex;
     int m_avgColIndex;
 
     SampleVector m_sampleBuffer;
@@ -262,36 +260,30 @@ private:
     inline void processClassic(float& sample, int& sampleVideo)
     {
         // Filling pixel on the current line - reference index 0 at start of sync pulse
-        // remove only sync pulse empirically, +4 is to compensate shift due to hsync amortizing factor of 1/4
-		//m_registeredTVScreen->setDataColor(colIndex, sampleVideo, sampleVideo, sampleVideo);
-		//m_registeredTVScreen->setDataColor(m_colIndex - m_numberSamplesPerHSync + m_numberSamplesPerHTop - 4, sampleVideo, sampleVideo, sampleVideo);
 		m_registeredTVScreen->setDataColor(m_sampleIndex3 - m_numberSamplesPerHSync, sampleVideo, sampleVideo, sampleVideo);
 
 		int synchroTimeSamples = (3 * m_samplesPerLine) / 4; // count 3/4 line globally
 		float synchroTrameLevel = 0.5f * ((float)synchroTimeSamples) * m_settings.m_levelBlack; // threshold is half the black value over 3/4th of line samples
 
-		float isHSyncNeeded = false;
+		bool isHSyncNeeded = false;
 
-		// Horizontal Synchro detection
-		if ((prevSample >= m_settings.m_levelSynchroTop &&
-			sample < m_settings.m_levelSynchroTop) // horizontal synchro detected
-			&& (m_sampleIndex > (m_samplesPerLine / 2) + m_numberSamplesPerLineSignals))
+		if (m_settings.m_hSync)
 		{
-			m_avgColIndex = m_sampleIndex - m_colIndex - m_numberSamplesPerHTop;
-			//qDebug("HSync: %d %d %d", m_sampleIndex, m_colIndex, m_avgColIndex);
-
-			if (m_settings.m_hSync)
+			// Horizontal Synchro detection
+			if ((prevSample >= m_settings.m_levelSynchroTop &&
+				sample < m_settings.m_levelSynchroTop) // horizontal synchro detected
+				&& (m_sampleIndex > (m_samplesPerLine / 2) + m_numberSamplesPerLineSignals))
 			{
 				int indexDiff = m_sampleIndex - m_sampleIndex3;
-				if (indexDiff > m_samplesPerLine / 2)
-					indexDiff -= m_samplesPerLine;
-				else if (indexDiff < -m_samplesPerLine / 2)
-					indexDiff += m_samplesPerLine;
+				if (indexDiff > (int)m_samplesPerLine / 2)
+					indexDiff -= (int)m_samplesPerLine;
+				else if (indexDiff < -(int)m_samplesPerLine / 2)
+					indexDiff += (int)m_samplesPerLine;
 
 				if (abs(indexDiff) > m_numberSamplesPerHTopNom)
 				{
 					m_syncErrorCount++;
-					if (m_syncErrorCount >= 4)
+					if (m_syncErrorCount >= 8)
 					{
 						// Fast sync: shift is too large, needs to be fixed ASAP
 						isHSyncNeeded = true;
@@ -302,77 +294,56 @@ private:
 
 				float errorAngle = 2 * M_PI * indexDiff / m_samplesPerLine;
 				m_syncShiftAverage += Complex(cos(errorAngle), sin(errorAngle));
+				m_sampleIndex = 0;
 			}
-			m_sampleIndex = 0;
+			else
+				m_sampleIndex++;
 		}
 		else
 		{
-			m_sampleIndex++;
+			m_syncShiftAverage = Complex(0, 0);
 		}
-
 		m_sampleIndex3++;
+
+		// count on first half of line for better separation between black and ultra black
+		if (m_sampleIndex3 < (int)m_samplesPerLine / 2)
+			m_ampLineSum += sample;
+
 		if (m_sampleIndex3 >= (int)m_samplesPerLine)
 		{
 			m_sampleIndex3 = 0;
-			if (m_rowIndex == m_numberOfSyncLines - 1)
-			{
-				// Slow sync: slight adjustement is needed
-				isHSyncNeeded = true;
+			if (m_rowIndex == m_numberOfSyncLines - 1 && m_settings.m_hSync)
+				isHSyncNeeded = true; // Slow sync: slight adjustement is needed
+			m_ampLineAvg = m_ampLineSum / ((m_samplesPerLine / 2) - m_numberSamplesPerHTop); // avg length is half line less horizontal top
+			m_ampLineSum = 0.0f;
+
+			// process line
+			m_lineIndex++; // new line
+			m_rowIndex += m_interleaved ? 2 : 1; // new row considering interleaving
+
+			if (m_rowIndex < m_settings.m_nbLines) {
+				m_registeredTVScreen->selectRow(m_rowIndex - m_numberOfSyncLines);
 			}
 		}
 
-		if (isHSyncNeeded && m_settings.m_hSync)
+		if (isHSyncNeeded)
 		{
 			float shiftAngle = atan2(m_syncShiftAverage.imag(), m_syncShiftAverage.real());
 			float shiftSamples = shiftAngle / (2 * M_PI) * m_samplesPerLine;
-			m_sampleIndex3 = shiftSamples;
+			m_sampleIndex3 += shiftSamples;
 			m_subsampleShift = fmod(shiftSamples, 1.0f);
 			m_syncShiftAverage = Complex(0, 0);
 			m_syncErrorCount = 0;
-			isHSyncNeeded = false;
 		}
-		if (!m_settings.m_hSync) // needs to be fixed: too much resource consumption
-			m_syncShiftAverage = Complex(0, 0);
-
-
-        if (m_colIndex < m_samplesPerLine + m_numberSamplesPerHTop - 1) // increment until full line + next horizontal pulse
-        {
-            m_colIndex++;
-
-            if (m_colIndex < (m_samplesPerLine/2)) { // count on first half of line for better separation between black and ultra black
-                m_ampLineSum += sample;
-            }
-        }
-        else // full line + next horizontal pulse => start of screen reference line
-        {
-            m_ampLineAvg = m_ampLineSum / ((m_samplesPerLine/2) - m_numberSamplesPerHTop); // avg length is half line less horizontal top
-            m_ampLineSum = 0.0f;
-
-            // set column index to start a new line
-            if (m_settings.m_hSync && (m_lineIndex == 0)) {
-                m_colIndex = m_numberSamplesPerHTop + m_avgColIndex/4; // amortizing 1/4
-            } else {
-                m_colIndex = m_numberSamplesPerHTop;
-            }
-
-            // process line
-            m_lineIndex++; // new line
-            m_rowIndex += m_interleaved ? 2 : 1; // new row considering interleaving
-
-            if (m_rowIndex < m_settings.m_nbLines) {
-                m_registeredTVScreen->selectRow(m_rowIndex - m_numberOfSyncLines);
-            }
-        }
 
         // Vertical sync and image rendering
-
         if (m_lineIndex > m_numberOfBlackLines) {
             m_verticalSynchroDetected = false; // reset trigger when detection zone is left
         }
 
         if ((m_settings.m_vSync) && (m_lineIndex <= m_settings.m_nbLines)) // VSync activated and lines in range
         {
-            if (m_colIndex >= synchroTimeSamples)
+            if (m_sampleIndex3 >= synchroTimeSamples)
             {
                 if (m_ampLineAvg < 0.15f) // ultra black detection
                 {

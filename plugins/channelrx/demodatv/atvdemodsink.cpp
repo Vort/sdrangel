@@ -56,7 +56,6 @@ ATVDemodSink::ATVDemodSink() :
     m_amSampleIndex(0),
     m_rowIndex(0),
     m_lineIndex(0),
-    m_objAvgColIndex(3),
     m_ampAverage(4800),
     m_bfoPLL(200/1000000, 100/1000000, 0.01),
     m_bfoFilter(200.0, 1000000.0, 0.9),
