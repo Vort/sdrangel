@@ -36,11 +36,11 @@ ATVDemodSink::ATVDemodSink() :
     m_scopeSink(nullptr),
     m_registeredTVScreen(nullptr),
     m_numberSamplesPerHTop(0),
-    m_imageIndex(0),
+	m_fieldIndex(0),
     m_synchroSamples(0),
-    m_verticalSynchroDetected(false),
+    /*m_verticalSynchroDetected(false),
     m_ampLineSum(0.0f),
-    m_ampLineAvg(0.0f),
+    m_ampLineAvg(0.0f),*/
     m_effMin(20.0f),
     m_effMax(-20.0f),
     m_ampMin(-1.0f),
@@ -70,8 +70,6 @@ ATVDemodSink::ATVDemodSink() :
     //m_intNumberSamplePerLine=0;
     m_synchroSamples=0;
     m_interleaved = true;
-    m_firstRowIndexEven = 0;
-    m_firstRowIndexOdd = 0;
 
     m_DSBFilter = new fftfilt(m_settings.m_fftBandwidth / (float) m_tvSampleRate, 2*m_ssbFftLen); // arbitrary cutoff
     m_DSBFilterBuffer = new Complex[m_ssbFftLen];
@@ -357,8 +355,6 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
         m_numberOfEqLines    = 0; // not applicable
         m_numberSamplesHSyncCrop = (int) (0.09f * lineDuration * sampleRate); // 9% of full line empirically
         m_interleaved = false; // irrelevant
-        m_firstRowIndexEven  = 0; // irrelevant
-        m_firstRowIndexOdd   = 0; // irrelevant
         break;
     case ATVDemodSettings::ATVStdShort:
         // what is left in a line for the image
@@ -367,8 +363,6 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
         m_numberOfEqLines    = 0;
         m_numberSamplesHSyncCrop = (int) (0.085f * lineDuration * sampleRate); // 8.5% of full line empirically
         m_interleaved = false;
-        m_firstRowIndexEven  = 0; // irrelevant
-        m_firstRowIndexOdd   = 0; // irrelevant
         break;
     case ATVDemodSettings::ATVStdShortInterleaved:
         // what is left in a line for the image
@@ -377,8 +371,6 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
         m_numberOfEqLines    = 0;
         m_numberSamplesHSyncCrop = (int) (0.085f * lineDuration * sampleRate); // 8.5% of full line empirically
         m_interleaved = true;
-        m_firstRowIndexEven  = 0;
-        m_firstRowIndexOdd   = 1;
         break;
     case ATVDemodSettings::ATVStd405: // Follows loosely the 405 lines standard
         // what is left in a ine for the image
@@ -387,8 +379,6 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
         m_numberOfEqLines    = 3;
         m_numberSamplesHSyncCrop = (int) (0.085f * lineDuration * sampleRate); // 8.5% of full line empirically
         m_interleaved = true;
-        m_firstRowIndexEven  = 0;
-        m_firstRowIndexOdd   = 3;
         break;
     case ATVDemodSettings::ATVStdPAL525: // Follows PAL-M standard
         // what is left in a 64/1.008 us line for the image
@@ -397,25 +387,30 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
         m_numberOfEqLines    = 3;
         m_numberSamplesHSyncCrop = (int) (0.085f * lineDuration * sampleRate); // 8.5% of full line empirically
         m_interleaved = true;
-        m_firstRowIndexEven  = 0;
-        m_firstRowIndexOdd   = 3;
         break;
     case ATVDemodSettings::ATVStdPAL625: // Follows PAL-B/G/H standard
     default:
         // what is left in a 64 us line for the image
         m_numberOfSyncLines  = 44; // (15+17)*2 - 20
-        m_numberOfBlackLines = 50; // above + 6
+        //m_numberOfBlackLines = 50; // above + 6
+		m_numberOfBlackLines = 49;
+		m_firstVisibleLine   = 23;
         m_numberOfEqLines    = 3;
         m_numberSamplesHSyncCrop = (int) (0.085f * lineDuration * sampleRate); // 8.5% of full line empirically
         m_interleaved = true;
-        m_firstRowIndexEven  = 0;
-        m_firstRowIndexOdd   = 1; // ???
     }
 
     // for now all standards apply this
-    m_numberSamplesPerLineSignals = (int) ((12.05f/64.0f) * lineDuration * sampleRate); // 12.0 = 1.65 + 4.7 + 5.7 : front porch + horizontal sync pulse + back porch
-	m_numberSamplesPerHSync = (int) ((10.4f/64.0f) * lineDuration * sampleRate);        // 10.4 = 4.7 + 5.7        : horizontal sync pulse + back porch
-    m_numberSamplesPerHTopNom = (int) ((4.7f/64.0f) * lineDuration * sampleRate);       // 4.7                     : horizontal sync pulse (ultra black) nominal value
+    m_numberSamplesPerLineSignals = (int) ((12.05f/64.0f) * lineDuration * sampleRate); // 12.05 = 1.65 + 4.7 + 5.7 : front porch + horizontal sync pulse + back porch
+	m_numberSamplesPerHSync = (int) ((10.4f/64.0f) * lineDuration * sampleRate);        // 10.4  = 4.7 + 5.7        : horizontal sync pulse + back porch
+    m_numberSamplesPerHTopNom = (int) ((4.7f/64.0f) * lineDuration * sampleRate);       // 4.7                      : horizontal sync pulse (ultra black) nominal value
+	m_numberSamplesPerVSync = (int)((27.3f / 64.0f) * lineDuration * sampleRate);       // 27.3                     : field sync broad pulse
+	
+	float shortSyncPulseDetectTime = (34.35f / 64.0f) * lineDuration * sampleRate;      // 34.35 = 32.0 + 2.35      : half line duration + sync short pulse
+	m_shortSyncPulseDetectTime = (int)shortSyncPulseDetectTime;
+	m_shortSyncPulseDetectLen1 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.75);
+	m_shortSyncPulseDetectLen2 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.25);
+
     m_numberSamplesPerHTop = m_numberSamplesPerHTopNom * (settings.m_topTimeFactor / 100.0f);  // adjust the value used in the system
 }
 
@@ -494,7 +489,7 @@ void ATVDemodSink::applyChannelSettings(int channelSampleRate, int channelFreque
         );
     }
 
-    m_imageIndex = 0;
+	m_fieldIndex = 0;
     m_colIndex = 0;
     m_rowIndex = 0;
 
@@ -586,7 +581,7 @@ void ATVDemodSink::applySettings(const ATVDemodSettings& settings, bool force)
             );
         }
 
-        m_imageIndex = 0;
+		m_fieldIndex = 0;
         m_colIndex = 0;
         m_rowIndex = 0;
     }
