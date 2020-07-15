@@ -134,11 +134,6 @@ private:
 	int m_vSyncSampleCount1;
 	int m_vSyncSampleCount2;
 
-    //bool m_verticalSynchroDetected;
-
-    //float m_ampLineSum;
-    //float m_ampLineAvg;
-
     float m_effMin;
     float m_effMax;
 
@@ -150,8 +145,8 @@ private:
     float m_fltBufferQ[6];
 
     int m_colIndex;
-    int m_sampleIndex;
-	int m_sampleIndex3;
+	int m_sampleIndex;         // assumed (averaged) sample offset from the start of horizontal sync pulse
+	int m_sampleIndexDetected; // detected sample offset from the start of horizontal sync pulse
 	int m_amSampleIndex;
     int m_rowIndex;
     int m_lineIndex;
@@ -265,7 +260,7 @@ private:
     inline void processClassic(float& sample, int& sampleVideo)
     {
         // Filling pixel on the current line - reference index 0 at start of sync pulse
-		m_registeredTVScreen->setDataColor(m_sampleIndex3 - m_numberSamplesPerHSync, sampleVideo, sampleVideo, sampleVideo);
+		m_registeredTVScreen->setDataColor(m_sampleIndex - m_numberSamplesPerHSync, sampleVideo, sampleVideo, sampleVideo);
 
 		bool isHSyncNeeded = false;
 		if (m_settings.m_hSync)
@@ -273,9 +268,9 @@ private:
 			// Horizontal Synchro detection
 			if ((prevSample >= m_settings.m_levelSynchroTop &&
 				sample < m_settings.m_levelSynchroTop) // horizontal synchro detected
-				&& (m_sampleIndex > (m_samplesPerLine / 2) + m_numberSamplesPerLineSignals))
+				&& (m_sampleIndexDetected > (m_samplesPerLine / 2) + m_numberSamplesPerLineSignals))
 			{
-				int indexDiff = m_sampleIndex - m_sampleIndex3;
+				int indexDiff = m_sampleIndexDetected - m_sampleIndex;
 				if (indexDiff > (int)m_samplesPerLine / 2)
 					indexDiff -= (int)m_samplesPerLine;
 				else if (indexDiff < -(int)m_samplesPerLine / 2)
@@ -295,29 +290,29 @@ private:
 
 				float errorAngle = 2 * M_PI * indexDiff / m_samplesPerLine;
 				m_syncShiftAverage += Complex(cos(errorAngle), sin(errorAngle));
-				m_sampleIndex = 0;
+				m_sampleIndexDetected = 0;
 			}
 			else
-				m_sampleIndex++;
+				m_sampleIndexDetected++;
 		}
 		else
 		{
 			m_syncShiftAverage = Complex(0, 0);
 		}
-		m_sampleIndex3++;
+		m_sampleIndex++;
 
 		if (m_settings.m_vSync && m_lineIndex > 3)
 		{
-			if (m_sampleIndex3 < m_numberSamplesPerVSync)
+			if (m_sampleIndex < m_numberSamplesPerVSync)
 				m_vSyncSampleCount1 += sample < m_settings.m_levelSynchroTop;
-			else if (m_sampleIndex3 > m_shortSyncPulseDetectTime)
+			else if (m_sampleIndex > m_shortSyncPulseDetectTime)
 				m_vSyncSampleCount2 += sample > m_settings.m_levelSynchroTop;
 		}
 
 		// end of line
-		if (m_sampleIndex3 >= (int)m_samplesPerLine)
+		if (m_sampleIndex >= (int)m_samplesPerLine)
 		{
-			m_sampleIndex3 = 0;
+			m_sampleIndex = 0;
 			m_lineIndex++;
 
 			if (m_lineIndex == m_firstVisibleLine &&
@@ -360,7 +355,7 @@ private:
 		{
 			float shiftAngle = atan2(m_syncShiftAverage.imag(), m_syncShiftAverage.real());
 			float shiftSamples = shiftAngle / (2 * M_PI) * m_samplesPerLine;
-			m_sampleIndex3 += shiftSamples;
+			m_sampleIndex += shiftSamples;
 			m_subsampleShift = fmod(shiftSamples, 1.0f);
 			m_syncShiftAverage = Complex(0, 0);
 			m_syncErrorCount = 0;

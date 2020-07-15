@@ -38,9 +38,6 @@ ATVDemodSink::ATVDemodSink() :
     m_numberSamplesPerHTop(0),
 	m_fieldIndex(0),
     m_synchroSamples(0),
-    /*m_verticalSynchroDetected(false),
-    m_ampLineSum(0.0f),
-    m_ampLineAvg(0.0f),*/
     m_effMin(20.0f),
     m_effMax(-20.0f),
     m_ampMin(-1.0f),
@@ -49,7 +46,7 @@ ATVDemodSink::ATVDemodSink() :
     m_colIndex(0),
     m_sampleIndex(0),
 	m_sampleIndex2(0),
-	m_sampleIndex3(0),
+	m_sampleIndexDetected(0),
 	m_syncErrorCount(0),
 	m_syncShiftAverage(0, 0),
 	m_subsampleShift(0.0),
