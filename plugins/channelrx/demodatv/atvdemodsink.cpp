@@ -398,12 +398,14 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
     }
 
     // for now all standards apply this
-    m_numberSamplesPerLineSignals = (int) ((12.05f/64.0f) * lineDuration * sampleRate); // 12.05 = 1.65 + 4.7 + 5.7 : front porch + horizontal sync pulse + back porch
-	m_numberSamplesPerHSync = (int) ((10.4f/64.0f) * lineDuration * sampleRate);        // 10.4  = 4.7 + 5.7        : horizontal sync pulse + back porch
-    m_numberSamplesPerHTopNom = (int) ((4.7f/64.0f) * lineDuration * sampleRate);       // 4.7                      : horizontal sync pulse (ultra black) nominal value
-	m_numberSamplesPerVSync = (int)((27.3f / 64.0f) * lineDuration * sampleRate);       // 27.3                     : field sync broad pulse
-	
-	float shortSyncPulseDetectTime = (34.35f / 64.0f) * lineDuration * sampleRate;      // 34.35 = 32.0 + 2.35      : half line duration + sync short pulse
+	// Rec. ITU-R BT.1700
+	// Table 2. Details of line synchronizing signals
+    m_numberSamplesPerLineSignals = (int)(lineDuration * sampleRate * 12.0  / 64.0); // "a", Line-blanking interval
+	m_numberSamplesPerHSync       = (int)(lineDuration * sampleRate * 10.5  / 64.0); // "b", Interval between time datum and back edge of line-blanking pulse
+    m_numberSamplesPerHTopNom     = (int)(lineDuration * sampleRate *  4.7  / 64.0); // "d", Duration of synchronizing pulse
+	// Table 3. Details of field synchronizing signals
+	m_numberSamplesPerVSync       = (int)(lineDuration * sampleRate * 27.3  / 64.0); // "q", Duration of field-synchronizing pulse
+	float shortSyncPulseDetectTime      = lineDuration * sampleRate * 34.35 / 64.0;  // 32.0 (half line duration) + 2.35 ("p", Duration of equalizing pulse)
 	m_shortSyncPulseDetectTime = (int)shortSyncPulseDetectTime;
 	m_shortSyncPulseDetectLen1 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.75);
 	m_shortSyncPulseDetectLen2 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.25);
