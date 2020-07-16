@@ -97,8 +97,7 @@ private:
     int m_channelSampleRate;
 	int m_channelFrequencyOffset;
     int m_tvSampleRate;
-    unsigned int m_samplesPerLineNom; //!< number of samples per complete line (includes sync signals) - nominal value
-    unsigned int m_samplesPerLine;    //!< number of samples per complete line (includes sync signals) - adusted value
+    int m_samplesPerLine;    //!< number of samples per complete line (includes sync signals) - adusted value
     ATVDemodSettings m_settings;
     int m_videoTabIndex;
 
@@ -119,6 +118,15 @@ private:
 	int m_shortSyncPulseDetectTime;
 	int m_shortSyncPulseDetectLen1;
 	int m_shortSyncPulseDetectLen2;
+
+	int m_vSyncDetectPos1;
+	int m_vSyncDetectPos2;
+	int m_vSyncDetectPos3;
+	int m_vSyncDetectPos4;
+
+	int m_vSyncFieldDetectLen1;
+	int m_vSyncFieldDetectLen2;
+
 	int m_numberOfEqLines;             //!< number of equalizing lines both whole and partial
     int m_numberSamplesPerLineSignals; //!< number of samples in the non image part of the line (signals = front porch + pulse + back porch)
     int m_numberSamplesPerHSync;       //!< number of samples per horizontal synchronization pattern (pulse + back porch)
@@ -147,6 +155,7 @@ private:
     int m_colIndex;
 	int m_sampleIndex;         // assumed (averaged) sample offset from the start of horizontal sync pulse
 	int m_sampleIndexDetected; // detected sample offset from the start of horizontal sync pulse
+	double m_sampleIndexFrac;
 	int m_amSampleIndex;
     int m_rowIndex;
     int m_lineIndex;
@@ -155,8 +164,6 @@ private:
 	Complex m_syncShiftAverage;
 	float m_subsampleShift;
 
-
-	long long m_sampleIndex2;
 	float prevSample;
 
     int m_avgColIndex;
@@ -262,34 +269,43 @@ private:
         // Filling pixel on the current line - reference index 0 at start of sync pulse
 		m_registeredTVScreen->setDataColor(m_sampleIndex - m_numberSamplesPerHSync, sampleVideo, sampleVideo, sampleVideo);
 
+		//m_sampleIndexFrac = -1.5;
+
 		bool isHSyncNeeded = false;
 		if (m_settings.m_hSync)
 		{
 			// Horizontal Synchro detection
 			if ((prevSample >= m_settings.m_levelSynchroTop &&
 				sample < m_settings.m_levelSynchroTop) // horizontal synchro detected
-				&& (m_sampleIndexDetected > (m_samplesPerLine / 2) + m_numberSamplesPerLineSignals))
+				&& (m_sampleIndexDetected > m_samplesPerLine - m_numberSamplesPerHTopNom))
 			{
-				int indexDiff = m_sampleIndexDetected - m_sampleIndex;
-				if (indexDiff > (int)m_samplesPerLine / 2)
-					indexDiff -= (int)m_samplesPerLine;
-				else if (indexDiff < -(int)m_samplesPerLine / 2)
-					indexDiff += (int)m_samplesPerLine;
+				double sampleIndexDetectedFrac = -0.1;
+				double indexDiff =
+					m_sampleIndexDetected + sampleIndexDetectedFrac -
+					m_sampleIndex - m_sampleIndexFrac;
+				if (indexDiff > m_samplesPerLine / 2)
+					indexDiff -= m_samplesPerLine;
+				else if (indexDiff < -m_samplesPerLine / 2)
+					indexDiff += m_samplesPerLine;
+				float errorAngle = 2 * M_PI * indexDiff / m_samplesPerLine;
+				Complex syncShift = Complex(cos(errorAngle), sin(errorAngle));
 
-				if (abs(indexDiff) > m_numberSamplesPerHTopNom)
+				if (fabs(indexDiff) > m_numberSamplesPerHTopNom)
 				{
 					m_syncErrorCount++;
 					if (m_syncErrorCount >= 8)
 					{
 						// Fast sync: shift is too large, needs to be fixed ASAP
+						//qCritical() << "HSync fast";
+						m_syncShiftAverage = syncShift;
 						isHSyncNeeded = true;
 					}
 				}
 				else
+				{
+					m_syncShiftAverage += syncShift;
 					m_syncErrorCount = 0;
-
-				float errorAngle = 2 * M_PI * indexDiff / m_samplesPerLine;
-				m_syncShiftAverage += Complex(cos(errorAngle), sin(errorAngle));
+				}
 				m_sampleIndexDetected = 0;
 			}
 			else
@@ -301,19 +317,22 @@ private:
 		}
 		m_sampleIndex++;
 
-		if (m_settings.m_vSync && m_lineIndex > 3)
+		if (m_settings.m_vSync)
 		{
-			if (m_sampleIndex < m_numberSamplesPerVSync)
+			if (m_sampleIndex > m_vSyncDetectPos1 && m_sampleIndex < m_vSyncDetectPos2)
 				m_vSyncSampleCount1 += sample < m_settings.m_levelSynchroTop;
-			else if (m_sampleIndex > m_shortSyncPulseDetectTime)
-				m_vSyncSampleCount2 += sample > m_settings.m_levelSynchroTop;
+			if (m_sampleIndex > m_vSyncDetectPos3 && m_sampleIndex < m_vSyncDetectPos4)
+				m_vSyncSampleCount2 += sample < m_settings.m_levelSynchroTop;
 		}
 
 		// end of line
-		if (m_sampleIndex >= (int)m_samplesPerLine)
+		if (m_sampleIndex >= m_samplesPerLine)
 		{
 			m_sampleIndex = 0;
 			m_lineIndex++;
+
+			if (m_lineIndex == 3 && m_fieldIndex == 0)
+				m_registeredTVScreen->renderImage(0, m_subsampleShift);
 
 			if (m_lineIndex == m_firstVisibleLine &&
 				m_fieldIndex == 0 &&
@@ -322,17 +341,25 @@ private:
 				isHSyncNeeded = true; // Slow sync: slight adjustement is needed
 			}
 
-			// Half of pulse size threshold allows sync with unfiltered sound
-			if (m_vSyncSampleCount1 > m_numberSamplesPerVSync / 2 &&
-				m_settings.m_vSync)
+			//// Half of pulse size threshold allows sync with unfiltered sound
+			if (m_vSyncSampleCount2 > (m_vSyncDetectPos4 - m_vSyncDetectPos3) / 2 &&
+				(m_lineIndex < 3 || m_lineIndex > 4) && m_settings.m_vSync)
 			{
-				m_lineIndex = 2;
-				if (m_vSyncSampleCount2 > m_shortSyncPulseDetectLen1)
+				if (m_vSyncSampleCount1 > m_vSyncFieldDetectLen1)
+				{
+					//qCritical() << "l" << m_lineIndex << "VSync 0";
 					m_fieldIndex = 0;
-				else if (m_vSyncSampleCount2 < m_shortSyncPulseDetectLen2)
+				}
+				else if (m_vSyncSampleCount1 < m_vSyncFieldDetectLen2)
+				{
+					//qCritical() << "l" << m_lineIndex << "VSync 1";
 					m_fieldIndex = 1;
-				else
-					m_fieldIndex = 1 - m_fieldIndex;
+				}
+				//else
+				//{
+				//	qCritical() << "l" << m_lineIndex << "VSync";
+				//}
+				m_lineIndex = 2;
 			}
 			m_vSyncSampleCount1 = 0;
 			m_vSyncSampleCount2 = 0;
@@ -341,13 +368,12 @@ private:
 			{
 				m_lineIndex = 1;
 				m_fieldIndex = 1 - m_fieldIndex;
-				if (m_fieldIndex == 1 || !m_interleaved)
-					m_registeredTVScreen->renderImage(0, m_subsampleShift);
+				//qCritical() << "l" << m_lineIndex << "VSYNC" << m_fieldIndex;
 			}
 
 			int rowIndex = m_lineIndex - m_firstVisibleLine;
 			if (m_interleaved)
-				rowIndex = rowIndex * 2 + 1 - m_fieldIndex;
+				rowIndex = rowIndex * 2 - m_fieldIndex;
 			m_registeredTVScreen->selectRow(rowIndex);
 		}
 
@@ -355,13 +381,13 @@ private:
 		{
 			float shiftAngle = atan2(m_syncShiftAverage.imag(), m_syncShiftAverage.real());
 			float shiftSamples = shiftAngle / (2 * M_PI) * m_samplesPerLine;
+			//qCritical() << fixed << qSetRealNumberPrecision(2) << "HSync shift:" << shiftSamples;
 			m_sampleIndex += shiftSamples;
 			m_subsampleShift = fmod(shiftSamples, 1.0f);
 			m_syncShiftAverage = Complex(0, 0);
 			m_syncErrorCount = 0;
 		}
 
-		//m_sampleIndex2++;
 		prevSample = sample;
     }
 };

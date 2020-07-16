@@ -45,8 +45,8 @@ ATVDemodSink::ATVDemodSink() :
     m_ampDelta(2.0f),
     m_colIndex(0),
     m_sampleIndex(0),
-	m_sampleIndex2(0),
 	m_sampleIndexDetected(0),
+	m_sampleIndexFrac(0.0),
 	m_syncErrorCount(0),
 	m_syncShiftAverage(0, 0),
 	m_subsampleShift(0.0),
@@ -404,11 +404,22 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
 	m_numberSamplesPerHSync       = (int)(lineDuration * sampleRate * 10.5  / 64.0); // "b", Interval between time datum and back edge of line-blanking pulse
     m_numberSamplesPerHTopNom     = (int)(lineDuration * sampleRate *  4.7  / 64.0); // "d", Duration of synchronizing pulse
 	// Table 3. Details of field synchronizing signals
+
+	m_vSyncDetectPos1             = (int)(lineDuration * sampleRate *  2.35 / 64.0);
+	m_vSyncDetectPos2             = (int)(lineDuration * sampleRate * 27.3  / 64.0);
+	m_vSyncDetectPos3             = (int)(lineDuration * sampleRate * 34.35 / 64.0);
+	m_vSyncDetectPos4             = (int)(lineDuration * sampleRate * 59.3  / 64.0);
+
+
 	m_numberSamplesPerVSync       = (int)(lineDuration * sampleRate * 27.3  / 64.0); // "q", Duration of field-synchronizing pulse
 	float shortSyncPulseDetectTime      = lineDuration * sampleRate * 34.35 / 64.0;  // 32.0 (half line duration) + 2.35 ("p", Duration of equalizing pulse)
 	m_shortSyncPulseDetectTime = (int)shortSyncPulseDetectTime;
 	m_shortSyncPulseDetectLen1 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.75);
 	m_shortSyncPulseDetectLen2 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.25);
+
+	float vSyncFieldDetectLen = lineDuration * sampleRate * 24.95 / 64.0;
+	m_vSyncFieldDetectLen1 = (int)(vSyncFieldDetectLen * 0.75);
+	m_vSyncFieldDetectLen2 = (int)(vSyncFieldDetectLen * 0.25);
 
     m_numberSamplesPerHTop = m_numberSamplesPerHTopNom * (settings.m_topTimeFactor / 100.0f);  // adjust the value used in the system
 }
@@ -442,8 +453,9 @@ void ATVDemodSink::applyChannelSettings(int channelSampleRate, int channelFreque
 
     if ((channelSampleRate != m_channelSampleRate) || force)
     {
-        ATVDemodSettings::getBaseValues(channelSampleRate, m_settings.m_nbLines * m_settings.m_fps, m_tvSampleRate, m_samplesPerLineNom);
-        m_samplesPerLine = m_samplesPerLineNom + m_settings.m_lineTimeFactor;
+		unsigned int samplesPerLineNom;
+        ATVDemodSettings::getBaseValues(channelSampleRate, m_settings.m_nbLines * m_settings.m_fps, m_tvSampleRate, samplesPerLineNom);
+        m_samplesPerLine = samplesPerLineNom + m_settings.m_lineTimeFactor;
         qDebug() << "ATVDemodSink::applyChannelSettings:"
                 << " m_tvSampleRate: " << m_tvSampleRate
                 << " m_fftBandwidth: " << m_settings.m_fftBandwidth
@@ -533,8 +545,9 @@ void ATVDemodSink::applySettings(const ATVDemodSettings& settings, bool force)
      || (settings.m_atvStd != m_settings.m_atvStd)
      || (settings.m_lineTimeFactor != m_settings.m_lineTimeFactor) || force)
     {
-        ATVDemodSettings::getBaseValues(m_channelSampleRate, settings.m_nbLines * settings.m_fps, m_tvSampleRate, m_samplesPerLineNom);
-        m_samplesPerLine = m_samplesPerLineNom + settings.m_lineTimeFactor;
+		unsigned int samplesPerLineNom;
+        ATVDemodSettings::getBaseValues(m_channelSampleRate, settings.m_nbLines * settings.m_fps, m_tvSampleRate, samplesPerLineNom);
+        m_samplesPerLine = samplesPerLineNom + settings.m_lineTimeFactor;
         m_ampAverage.resize(m_samplesPerLine * m_settings.m_nbLines * 2); // AGC average in two full images
 
         qDebug() << "ATVDemodSink::applySettings:"
