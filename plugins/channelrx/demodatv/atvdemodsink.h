@@ -112,7 +112,6 @@ private:
     //int m_intNumberSamplePerLine;
     int m_numberSamplesPerHTopNom;     //!< number of samples per horizontal synchronization pulse (pulse in ultra-black) - nominal value
     int m_numberSamplesPerHTop;        //!< number of samples per horizontal synchronization pulse (pulse in ultra-black) - adusted value
-	int m_numberOfSyncLines;           //!< this is the number of non displayable lines at the start of a frame. First displayable row comes next.
     int m_numberOfBlackLines;          //!< this is the total number of lines not part of the image and is used for vertical screen size
 	int m_firstVisibleLine;
 
@@ -125,7 +124,6 @@ private:
 	int m_vSyncFieldDetectLen2;
 
 	int m_numberOfVSyncLines;
-	int m_numberOfEqLines;             //!< number of equalizing lines both whole and partial
     int m_numberSamplesPerLineSignals; //!< number of samples in the non image part of the line (signals = front porch + pulse + back porch)
     int m_numberSamplesPerHSync;       //!< number of samples per horizontal synchronization pattern (pulse + back porch)
 	int m_numberSamplesHSyncCrop;      //!< number of samples to crop from start of horizontal synchronization
@@ -328,7 +326,7 @@ private:
 			{
 				float shiftSamples = 0.0f;
 
-				// Slow sync: slight adjustement is needed
+				// Slow sync: slight adjustment is needed
 				if (m_syncShiftCount != 0 && m_settings.m_hSync)
 				{
 					shiftSamples = m_syncShiftSum / m_syncShiftCount;
@@ -341,21 +339,29 @@ private:
 			}
 
 			if (m_vSyncSampleCount2 > (m_vSyncDetectPos4 - m_vSyncDetectPos3) / 2 &&
-				(m_lineIndex < 3 || m_lineIndex > 4) && m_settings.m_vSync)
+				(m_lineIndex < 3 || m_lineIndex > m_numberOfVSyncLines + 1) && m_settings.m_vSync)
 			{
-				if (m_vSyncSampleCount1 > m_vSyncFieldDetectLen1)
-					m_fieldIndex = 0;
-				else if (m_vSyncSampleCount1 < m_vSyncFieldDetectLen2)
-					m_fieldIndex = 1;
+				if (m_interleaved)
+				{
+					if (m_vSyncSampleCount1 > m_vSyncFieldDetectLen1)
+						m_fieldIndex = 0;
+					else if (m_vSyncSampleCount1 < m_vSyncFieldDetectLen2)
+						m_fieldIndex = 1;
+				}
 				m_lineIndex = 2;
 			}
 			m_vSyncSampleCount1 = 0;
 			m_vSyncSampleCount2 = 0;
 
-			if (m_lineIndex > m_settings.m_nbLines / 2 + m_fieldIndex)
+			if (m_lineIndex > m_settings.m_nbLines / 2 + m_fieldIndex && m_interleaved)
 			{
 				m_lineIndex = 1;
 				m_fieldIndex = 1 - m_fieldIndex;
+			}
+			else if (m_lineIndex > m_settings.m_nbLines && !m_interleaved)
+			{
+				m_lineIndex = 1;
+				m_fieldIndex = 0;
 			}
 
 			int rowIndex = m_lineIndex - m_firstVisibleLine;
