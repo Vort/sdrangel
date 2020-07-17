@@ -46,10 +46,9 @@ ATVDemodSink::ATVDemodSink() :
     m_colIndex(0),
     m_sampleIndex(0),
 	m_sampleIndexDetected(0),
-	m_sampleIndexFrac(0.0),
 	m_syncErrorCount(0),
-	m_syncShiftAverage(0, 0),
-	m_subsampleShift(0.0),
+	m_syncShiftSum(0.0f),
+	m_syncShiftCount(0),
     m_amSampleIndex(0),
     m_rowIndex(0),
     m_lineIndex(0),
@@ -392,6 +391,7 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
         //m_numberOfBlackLines = 50; // above + 6
 		m_numberOfBlackLines = 49;
 		m_firstVisibleLine   = 23;
+		m_numberOfVSyncLines = 3;
         m_numberOfEqLines    = 3;
         m_numberSamplesHSyncCrop = (int) (0.085f * lineDuration * sampleRate); // 8.5% of full line empirically
         m_interleaved = true;
@@ -403,19 +403,12 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
     m_numberSamplesPerLineSignals = (int)(lineDuration * sampleRate * 12.0  / 64.0); // "a", Line-blanking interval
 	m_numberSamplesPerHSync       = (int)(lineDuration * sampleRate * 10.5  / 64.0); // "b", Interval between time datum and back edge of line-blanking pulse
     m_numberSamplesPerHTopNom     = (int)(lineDuration * sampleRate *  4.7  / 64.0); // "d", Duration of synchronizing pulse
+	
 	// Table 3. Details of field synchronizing signals
-
 	m_vSyncDetectPos1             = (int)(lineDuration * sampleRate *  2.35 / 64.0);
 	m_vSyncDetectPos2             = (int)(lineDuration * sampleRate * 27.3  / 64.0);
 	m_vSyncDetectPos3             = (int)(lineDuration * sampleRate * 34.35 / 64.0);
 	m_vSyncDetectPos4             = (int)(lineDuration * sampleRate * 59.3  / 64.0);
-
-
-	m_numberSamplesPerVSync       = (int)(lineDuration * sampleRate * 27.3  / 64.0); // "q", Duration of field-synchronizing pulse
-	float shortSyncPulseDetectTime      = lineDuration * sampleRate * 34.35 / 64.0;  // 32.0 (half line duration) + 2.35 ("p", Duration of equalizing pulse)
-	m_shortSyncPulseDetectTime = (int)shortSyncPulseDetectTime;
-	m_shortSyncPulseDetectLen1 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.75);
-	m_shortSyncPulseDetectLen2 = (int)((m_samplesPerLine - shortSyncPulseDetectTime) * 0.25);
 
 	float vSyncFieldDetectLen = lineDuration * sampleRate * 24.95 / 64.0;
 	m_vSyncFieldDetectLen1 = (int)(vSyncFieldDetectLen * 0.75);
