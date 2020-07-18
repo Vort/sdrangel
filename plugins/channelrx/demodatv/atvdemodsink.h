@@ -115,13 +115,14 @@ private:
     int m_numberOfBlackLines;          //!< this is the total number of lines not part of the image and is used for vertical screen size
 	int m_firstVisibleLine;
 
-	int m_vSyncDetectPos1;
-	int m_vSyncDetectPos2;
-	int m_vSyncDetectPos3;
-	int m_vSyncDetectPos4;
+	int m_fieldDetectStartPos;
+	int m_fieldDetectEndPos;
+	int m_vSyncDetectStartPos;
+	int m_vSyncDetectEndPos;
 
-	int m_vSyncFieldDetectLen1;
-	int m_vSyncFieldDetectLen2;
+	int m_vSyncDetectThreshold;
+	int m_fieldDetectThreshold1;
+	int m_fieldDetectThreshold2;
 
 	int m_numberOfVSyncLines;
     int m_numberSamplesPerLineSignals; //!< number of samples in the non image part of the line (signals = front porch + pulse + back porch)
@@ -134,8 +135,8 @@ private:
     int m_fieldIndex;
     int m_synchroSamples;
 
-	int m_vSyncSampleCount1;
-	int m_vSyncSampleCount2;
+	int m_fieldDetectSampleCount;
+	int m_vSyncDetectSampleCount;
 
     float m_effMin;
     float m_effMax;
@@ -308,10 +309,10 @@ private:
 
 		if (m_settings.m_vSync)
 		{
-			if (m_sampleIndex > m_vSyncDetectPos1 && m_sampleIndex < m_vSyncDetectPos2)
-				m_vSyncSampleCount1 += sample < m_settings.m_levelSynchroTop;
-			if (m_sampleIndex > m_vSyncDetectPos3 && m_sampleIndex < m_vSyncDetectPos4)
-				m_vSyncSampleCount2 += sample < m_settings.m_levelSynchroTop;
+			if (m_sampleIndex > m_fieldDetectStartPos && m_sampleIndex < m_fieldDetectEndPos)
+				m_fieldDetectSampleCount += sample < m_settings.m_levelSynchroTop;
+			if (m_sampleIndex > m_vSyncDetectStartPos && m_sampleIndex < m_vSyncDetectEndPos)
+				m_vSyncDetectSampleCount += sample < m_settings.m_levelSynchroTop;
 		}
 
 		// end of line
@@ -337,20 +338,20 @@ private:
 					shiftSamples < -1.0f ? -1.0f : (shiftSamples > 1.0f ? 1.0f : shiftSamples));
 			}
 
-			if (m_vSyncSampleCount2 > (m_vSyncDetectPos4 - m_vSyncDetectPos3) / 2 &&
+			if (m_vSyncDetectSampleCount > m_vSyncDetectThreshold &&
 				(m_lineIndex < 3 || m_lineIndex > m_numberOfVSyncLines + 1) && m_settings.m_vSync)
 			{
 				if (m_interleaved)
 				{
-					if (m_vSyncSampleCount1 > m_vSyncFieldDetectLen1)
+					if (m_fieldDetectSampleCount > m_fieldDetectThreshold1)
 						m_fieldIndex = 0;
-					else if (m_vSyncSampleCount1 < m_vSyncFieldDetectLen2)
+					else if (m_fieldDetectSampleCount < m_fieldDetectThreshold2)
 						m_fieldIndex = 1;
 				}
 				m_lineIndex = 2;
 			}
-			m_vSyncSampleCount1 = 0;
-			m_vSyncSampleCount2 = 0;
+			m_fieldDetectSampleCount = 0;
+			m_vSyncDetectSampleCount = 0;
 
 			if (m_lineIndex > m_settings.m_nbLines / 2 + m_fieldIndex && m_interleaved)
 			{

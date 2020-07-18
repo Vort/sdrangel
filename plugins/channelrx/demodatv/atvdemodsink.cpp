@@ -393,21 +393,32 @@ void ATVDemodSink::applyStandard(int sampleRate, const ATVDemodSettings& setting
     }
 
     // for now all standards apply this
+
 	// Rec. ITU-R BT.1700
 	// Table 2. Details of line synchronizing signals
     m_numberSamplesPerLineSignals = (int)(lineDuration * sampleRate * 12.0  / 64.0); // "a", Line-blanking interval
 	m_numberSamplesPerHSync       = (int)(lineDuration * sampleRate * 10.5  / 64.0); // "b", Interval between time datum and back edge of line-blanking pulse
     m_numberSamplesPerHTopNom     = (int)(lineDuration * sampleRate *  4.7  / 64.0); // "d", Duration of synchronizing pulse
-	
-	// Table 3. Details of field synchronizing signals
-	m_vSyncDetectPos1             = (int)(lineDuration * sampleRate *  2.35 / 64.0);
-	m_vSyncDetectPos2             = (int)(lineDuration * sampleRate * 27.3  / 64.0);
-	m_vSyncDetectPos3             = (int)(lineDuration * sampleRate * 34.35 / 64.0);
-	m_vSyncDetectPos4             = (int)(lineDuration * sampleRate * 59.3  / 64.0);
 
-	float vSyncFieldDetectLen = lineDuration * sampleRate * 24.95 / 64.0;
-	m_vSyncFieldDetectLen1 = (int)(vSyncFieldDetectLen * 0.75);
-	m_vSyncFieldDetectLen2 = (int)(vSyncFieldDetectLen * 0.25);
+	// Table 3. Details of field synchronizing signals
+	float hl = 32.0f; // half of the line
+	float p  = 2.35f; // "p", Duration of equalizing pulse
+	float q  = 27.3f; // "q", Duration of field-synchronizing pulse
+
+	// In the first half of the first line field index is detected
+	m_fieldDetectStartPos = (int)(lineDuration * sampleRate * p / 64.0);
+	m_fieldDetectEndPos   = (int)(lineDuration * sampleRate * q / 64.0);
+	// In the second half of the first line vertical synchronization is detected
+	m_vSyncDetectStartPos = (int)(lineDuration * sampleRate * (p + hl) / 64.0);
+	m_vSyncDetectEndPos   = (int)(lineDuration * sampleRate * (q + hl) / 64.0);
+
+	float fieldDetectPercent = 0.75f; // It is better not to detect field index than detect it wrong
+	float detectTotalLen = lineDuration * sampleRate * (q - p) / 64.0; // same for field index and vSync detection
+	m_fieldDetectThreshold1 = (int)(detectTotalLen * fieldDetectPercent);
+	m_fieldDetectThreshold2 = (int)(detectTotalLen * (1.0f - fieldDetectPercent));
+
+	float vSyncDetectPercent = 0.5f;
+	m_vSyncDetectThreshold = (int)(detectTotalLen * vSyncDetectPercent);
 
     m_numberSamplesPerHTop = m_numberSamplesPerHTopNom * (settings.m_topTimeFactor / 100.0f);  // adjust the value used in the system
 }
