@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <QDebug>
 
+// Note: When this object is created, QWidget* is converted to bool
 TVScreen::TVScreen(bool blnColor, QWidget* parent) :
         QGLWidget(parent), m_objMutex(QMutex::NonRecursive), m_objGLShaderArray(blnColor)
 {
@@ -56,6 +57,11 @@ TVScreen::~TVScreen()
 void TVScreen::setColor(bool blnColor)
 {
 	m_objGLShaderArray.setColor(blnColor);
+}
+
+void TVScreen::setExtraColumns(bool blnExtraColumns)
+{
+	m_objGLShaderArray.setExtraColumns(blnExtraColumns);
 }
 
 QRgb* TVScreen::getRowBuffer(int intRow)

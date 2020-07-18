@@ -256,8 +256,6 @@ private:
         }
     }
 
-    // Vertical sync is obtained when the average level of signal on a line is below a certain threshold. This is obtained by lowering signal to ultra black during at least 3/4th of the line
-    // We use directly the sum of line sample values
     inline void processClassic(float& sample, int& sampleVideo)
     {
         // Filling pixel on the current line - reference index 0 at start of sync pulse
@@ -335,7 +333,8 @@ private:
 					m_syncShiftCount = 0;
 					m_syncErrorCount = 0;
 				}
-				m_registeredTVScreen->renderImage(0, shiftSamples);
+				m_registeredTVScreen->renderImage(0,
+					shiftSamples < -1.0f ? -1.0f : (shiftSamples > 1.0f ? 1.0f : shiftSamples));
 			}
 
 			if (m_vSyncSampleCount2 > (m_vSyncDetectPos4 - m_vSyncDetectPos3) / 2 &&
