@@ -155,9 +155,9 @@ private:
     int m_rowIndex;
     int m_lineIndex;
 
-	int m_syncErrorCount;
-	float m_syncShiftSum;
-	int m_syncShiftCount;
+	float m_hSyncShiftSum;
+	int m_hSyncShiftCount;
+	int m_hSyncErrorCount;
 
 	float prevSample;
 
@@ -271,29 +271,29 @@ private:
 			{
 				double sampleIndexDetectedFrac = 
 					(sample - m_settings.m_levelSynchroTop) / (prevSample - sample);
-				double indexDiff = -m_sampleIndex - sampleIndexDetectedFrac;
-				if (indexDiff > m_samplesPerLine / 2)
-					indexDiff -= m_samplesPerLine;
-				else if (indexDiff < -m_samplesPerLine / 2)
-					indexDiff += m_samplesPerLine;
+				double hSyncShift = -m_sampleIndex - sampleIndexDetectedFrac;
+				if (hSyncShift > m_samplesPerLine / 2)
+					hSyncShift -= m_samplesPerLine;
+				else if (hSyncShift < -m_samplesPerLine / 2)
+					hSyncShift += m_samplesPerLine;
 
-				if (fabs(indexDiff) > m_numberSamplesPerHTopNom)
+				if (fabs(hSyncShift) > m_numberSamplesPerHTopNom)
 				{
-					m_syncErrorCount++;
-					if (m_syncErrorCount >= 8)
+					m_hSyncErrorCount++;
+					if (m_hSyncErrorCount >= 8)
 					{
 						// Fast sync: shift is too large, needs to be fixed ASAP
 						m_sampleIndex = 0;
-						m_syncShiftSum = 0.0;
-						m_syncShiftCount = 0;
-						m_syncErrorCount = 0;
+						m_hSyncShiftSum = 0.0;
+						m_hSyncShiftCount = 0;
+						m_hSyncErrorCount = 0;
 					}
 				}
 				else
 				{
-					m_syncShiftSum += indexDiff;
-					m_syncShiftCount++;
-					m_syncErrorCount = 0;
+					m_hSyncShiftSum += hSyncShift;
+					m_hSyncShiftCount++;
+					m_hSyncErrorCount = 0;
 				}
 				m_sampleIndexDetected = 0;
 			}
@@ -302,8 +302,8 @@ private:
 		}
 		else
 		{
-			m_syncShiftSum = 0.0f;
-			m_syncShiftCount = 0;
+			m_hSyncShiftSum = 0.0f;
+			m_hSyncShiftCount = 0;
 		}
 		m_sampleIndex++;
 
@@ -326,13 +326,13 @@ private:
 				float shiftSamples = 0.0f;
 
 				// Slow sync: slight adjustment is needed
-				if (m_syncShiftCount != 0 && m_settings.m_hSync)
+				if (m_hSyncShiftCount != 0 && m_settings.m_hSync)
 				{
-					shiftSamples = m_syncShiftSum / m_syncShiftCount;
+					shiftSamples = m_hSyncShiftSum / m_hSyncShiftCount;
 					m_sampleIndex = shiftSamples;
-					m_syncShiftSum = 0.0f;
-					m_syncShiftCount = 0;
-					m_syncErrorCount = 0;
+					m_hSyncShiftSum = 0.0f;
+					m_hSyncShiftCount = 0;
+					m_hSyncErrorCount = 0;
 				}
 				m_registeredTVScreen->renderImage(0,
 					shiftSamples < -1.0f ? -1.0f : (shiftSamples > 1.0f ? 1.0f : shiftSamples));
