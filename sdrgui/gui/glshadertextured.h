@@ -32,7 +32,7 @@ class QOpenGLShaderProgram;
 class QMatrix4x4;
 class QImage;
 
-class SDRGUI_API GLShaderTextured
+class SDRGUI_API GLShaderTextured : protected QOpenGLFunctions
 {
 public:
 	GLShaderTextured();
@@ -48,7 +48,7 @@ private:
 	void draw(unsigned int mode, const QMatrix4x4& transformMatrix, GLfloat *textureCoords, GLfloat *vertices, int nbVertices);
 
 	QOpenGLShaderProgram *m_program;
-	QOpenGLTexture *m_texture;
+	unsigned int m_textureId;
 	int m_matrixLoc;
 	int m_textureLoc;
 	static const QString m_vertexShaderSourceTextured;
