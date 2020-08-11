@@ -32,6 +32,7 @@ ATVDemodSink::ATVDemodSink() :
     m_channelFrequencyOffset(0),
     m_tvSampleRate(1000000),
     m_samplesPerLine(100),
+	m_samplesPerLineFrac(0.0f),
     m_videoTabIndex(0),
     m_scopeSink(nullptr),
     m_registeredTVScreen(nullptr),
@@ -97,10 +98,10 @@ void ATVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleV
             c *= m_nco.nextIQ();
         }
 
-        if ((m_tvSampleRate == m_channelSampleRate) && (!m_settings.m_forceDecimator)) // no decimation
-        {
+        //if ((m_tvSampleRate == m_channelSampleRate) && (!m_settings.m_forceDecimator)) // no decimation
+        //{
             demod(c);
-        }
+        /*}
         else
         {
             Complex ci;
@@ -109,7 +110,7 @@ void ATVDemodSink::feed(const SampleVector::const_iterator& begin, const SampleV
                 demod(ci);
                 m_interpolatorDistanceRemain += m_interpolatorDistance;
             }
-        }
+        }*/
     }
 
     if ((m_videoTabIndex == 1) && (m_scopeSink)) // do only if scope tab is selected and scope is available
@@ -442,6 +443,7 @@ void ATVDemodSink::applyChannelSettings(int channelSampleRate, int channelFreque
         unsigned int samplesPerLineNom;
         ATVDemodSettings::getBaseValues(channelSampleRate, m_settings.m_nbLines * m_settings.m_fps, m_tvSampleRate, samplesPerLineNom);
         m_samplesPerLine = samplesPerLineNom + m_settings.m_lineTimeFactor;
+		m_samplesPerLineFrac = (float)channelSampleRate / (m_settings.m_nbLines * m_settings.m_fps) - m_samplesPerLine;
         qDebug() << "ATVDemodSink::applyChannelSettings:"
                 << " m_tvSampleRate: " << m_tvSampleRate
                 << " m_fftBandwidth: " << m_settings.m_fftBandwidth
@@ -533,7 +535,8 @@ void ATVDemodSink::applySettings(const ATVDemodSettings& settings, bool force)
         unsigned int samplesPerLineNom;
         ATVDemodSettings::getBaseValues(m_channelSampleRate, settings.m_nbLines * settings.m_fps, m_tvSampleRate, samplesPerLineNom);
         m_samplesPerLine = samplesPerLineNom + settings.m_lineTimeFactor;
-        m_ampAverage.resize(m_samplesPerLine * m_settings.m_nbLines * 2); // AGC average in two full images
+		m_samplesPerLineFrac = (float)m_channelSampleRate / (m_settings.m_nbLines * m_settings.m_fps) - m_samplesPerLine;
+		m_ampAverage.resize(m_samplesPerLine * m_settings.m_nbLines * 2); // AGC average in two full images
 
         qDebug() << "ATVDemodSink::applySettings:"
                 << " m_tvSampleRate: " << m_tvSampleRate

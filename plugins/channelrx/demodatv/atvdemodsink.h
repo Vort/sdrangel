@@ -98,8 +98,9 @@ private:
     int m_channelSampleRate;
 	int m_channelFrequencyOffset;
     int m_tvSampleRate;
-    int m_samplesPerLine;    //!< number of samples per complete line (includes sync signals) - adusted value
-    ATVDemodSettings m_settings;
+    int m_samplesPerLine;       //!< number of samples per complete line (includes sync signals) - adusted value
+	float m_samplesPerLineFrac; //!< number of samples per complete line (includes sync signals), fractional part
+	ATVDemodSettings m_settings;
     int m_videoTabIndex;
 
     //*************** SCOPE  ***************
@@ -252,7 +253,7 @@ private:
         {
 			if (m_settings.m_hSync)
 			{
-				float sampleOffsetFloat = m_hSyncShift + m_sampleOffsetFrac;
+				float sampleOffsetFloat = m_hSyncShift + m_sampleOffsetFrac - m_samplesPerLineFrac;
 				m_sampleOffset = sampleOffsetFloat;
 				m_sampleOffsetFrac = sampleOffsetFloat - m_sampleOffset;
 			}
